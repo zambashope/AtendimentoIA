@@ -1,8 +1,13 @@
+require('dotenv').config();
+
+const http = require('http');
+const PORT = process.env.PORT || 3000;
+
+
 const fs = require('fs');
 const qrcode = require('qrcode-terminal');
 const { Client } = require('whatsapp-web.js');
 const Groq = require('groq-sdk');
-require('dotenv').config();
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 const whatsapp = new Client();
@@ -111,3 +116,11 @@ whatsapp.on('message_create', async msg => {
 });
 
 whatsapp.initialize();
+
+
+http.createServer((req, res) => {
+  res.writeHead(200, {'Content-Type': 'text/plain'});
+  res.end('Bot WhatsApp está rodando.\n');
+}).listen(PORT, () => {
+  console.log(`🌐 Servidor HTTP iniciado na porta ${PORT}`);
+});
