@@ -3,6 +3,8 @@ require('dotenv').config();
 const http = require('http');
 const PORT = process.env.PORT || 3000;
 
+let currentQR = null;
+let isReady = false;
 
 const fs = require('fs');
 const qrcode = require('qrcode-terminal');
@@ -65,12 +67,15 @@ const getGroqChatCompletion = async (userHistory) => {
 
 // Inicializa o QR code do WhatsApp
 whatsapp.on('qr', qr => {
-  console.log('📱 Escaneie o QR Code para conectar no WhatsApp:');
-  qrcode.generate(qr, { small: true });
+  currentQR = qr;
+  isReady = false;
+  console.log('📱 QR Code atualizado. Aguardando conexão...');
 });
+
 
 // Pronto para uso
 whatsapp.on('ready', () => {
+  isReady = true;
   console.log('🤖 Bot de atendimento da Clínica está online!');
 });
 
@@ -119,6 +124,18 @@ whatsapp.initialize();
 
 
 http.createServer((req, res) => {
+  if (req.url === '/status') {
+    const statusData = {
+      status: isReady ? 'conectado' : 'aguardando_qr',
+      qr: currentQR
+    };
+  
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(statusData));
+    return;
+  }
+
+  
   if (req.url === '/') {
     // Retorna o conteúdo do banco de dados como JSON
     if (fs.existsSync(DB_PATH)) {
