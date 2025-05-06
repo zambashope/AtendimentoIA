@@ -119,8 +119,21 @@ whatsapp.initialize();
 
 
 http.createServer((req, res) => {
-  res.writeHead(200, {'Content-Type': 'text/plain'});
-  res.end('Bot WhatsApp está rodando.\n');
+  if (req.url === '/') {
+    // Retorna o conteúdo do banco de dados como JSON
+    if (fs.existsSync(DB_PATH)) {
+      const dbData = fs.readFileSync(DB_PATH, 'utf8');
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(dbData);
+    } else {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ erro: 'Banco de dados não encontrado.' }));
+    }
+  } else {
+    // Página padrão (evita erro no Render)
+    res.writeHead(200, { 'Content-Type': 'text/plain' });
+    res.end('Bot WhatsApp está rodando.\n');
+  }
 }).listen(PORT, () => {
   console.log(`🌐 Servidor HTTP iniciado na porta ${PORT}`);
 });
