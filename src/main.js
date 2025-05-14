@@ -1,22 +1,25 @@
 require('dotenv').config();
-
+const express = require('express');
 const http = require('http');
-const PORT = process.env.PORT || 3000;
-
-let currentQR = null;
-let isReady = false;
-
 const fs = require('fs');
+const cors = require("cors")
 const qrcode = require('qrcode-terminal');
-const { Client } = require('whatsapp-web.js');
+const { Client, MessageMedia } = require('whatsapp-web.js');
 const Groq = require('groq-sdk');
 
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
-const whatsapp = new Client();
+const PORT = process.env.PORT || 3000;
 const DB_PATH = './db.json';
 const treinamento = require('./treinamento');
 
+const app = express();
+app.use(cors())
+const server = http.createServer(app);
 
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+const whatsapp = new Client();
+
+let currentQR = null;
+let isReady = false;
 
 // Carrega o histórico do JSON
 const loadDB = () => {
@@ -41,10 +44,7 @@ const saveDB = (db) => {
 const getGroqChatCompletion = async (userHistory) => {
   console.log('🧠 Enviando histórico para a IA...');
   const messages = [
-    {
-      role: "system",
-      content: treinamento
-    },
+    { role: "system", content: treinamento },
     ...userHistory.map(msg => ({
       role: msg.from === 'user' ? 'user' : 'assistant',
       content: msg.message
@@ -70,14 +70,16 @@ whatsapp.on('qr', qr => {
   currentQR = qr;
   isReady = false;
   console.log('📱 QR Code atualizado. Aguardando conexão...');
+  qrcode.generate(qr, { small: true });
 });
-
 
 // Pronto para uso
 whatsapp.on('ready', () => {
   isReady = true;
+  currentQR = null;  // Limpa o QR code após a conexão
   console.log('🤖 Bot de atendimento da Clínica está online!');
 });
+
 
 // Mensagens recebidas
 whatsapp.on('message_create', async msg => {
@@ -88,23 +90,18 @@ whatsapp.on('message_create', async msg => {
 
   const db = loadDB();
 
-  const { MessageMedia } = require('whatsapp-web.js'); // Ensure you have this import
-
   if (!db[userId]) {
-      console.log(`👤 Novo usuário detectado: ${userId}`);
-      db[userId] = [];
-  
-      const welcomeMessage = "Olá! Seja bem-vindo à Clínica Saúde e Bem-Estar 🌿. Como posso te ajudar hoje?";
-      console.log(`📤 Enviando mensagem de boas-vindas para ${userId}`);
-      await whatsapp.sendMessage(userId, welcomeMessage);
-  
-      // Create MessageMedia from the URL
-      const imageUrl = "https://static.itdg.com.br/images/640-auto/f08b02ed1af94d2b9e7eade3ba5a36f2/chas-atuam-na-perda-de-peso-shutterstock.jpg";
-  
-      const media = await MessageMedia.fromUrl(imageUrl);
-      await whatsapp.sendMessage(userId, media);
-  
-      db[userId].push({ from: 'bot', message: welcomeMessage });
+    console.log(`👤 Novo usuário detectado: ${userId}`);
+    db[userId] = [];
+
+    const welcomeMessage = "Olá! Seja bem-vindo à Clínica Saúde e Bem-Estar 🌿";
+    console.log(`📤 Enviando mensagem de boas-vindas para ${userId}`);
+    await whatsapp.sendMessage(userId, welcomeMessage);
+    const imageUrl = 'https://s3-sa-east-1.amazonaws.com/heroku-exercicioemcasa/wp-content/uploads/2023/07/04141336/ANTES_E_DEPOIS_DE_EMAGRECER_GABI_TIOSSI_1.jpg';
+    const media = await MessageMedia.fromUrl(imageUrl);
+    await whatsapp.sendMessage(userId, media);
+
+    db[userId].push({ from: 'bot', message: welcomeMessage });
   }
 
   db[userId].push({ from: 'user', message: msg.body });
@@ -122,35 +119,27 @@ whatsapp.on('message_create', async msg => {
 
 whatsapp.initialize();
 
+// Rota de status
+app.get('/status', (req, res) => {
+  const statusData = {
+    status: isReady ? 'conectado' : 'aguardando_qr',
+    qr: currentQR || null
+  };
+  res.json(statusData);
+});
 
-http.createServer((req, res) => {
-  if (req.url === '/status') {
-    const statusData = {
-      status: isReady ? 'conectado' : 'aguardando_qr',
-      qr: currentQR
-    };
-  
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(statusData));
-    return;
-  }
 
-  
-  if (req.url === '/') {
-    // Retorna o conteúdo do banco de dados como JSON
-    if (fs.existsSync(DB_PATH)) {
-      const dbData = fs.readFileSync(DB_PATH, 'utf8');
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(dbData);
-    } else {
-      res.writeHead(404, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ erro: 'Banco de dados não encontrado.' }));
-    }
+// Rota do banco de dados
+app.get('/', (req, res) => {
+  if (fs.existsSync(DB_PATH)) {
+    const dbData = fs.readFileSync(DB_PATH, 'utf8');
+    res.json(JSON.parse(dbData));
   } else {
-    // Página padrão (evita erro no Render)
-    res.writeHead(200, { 'Content-Type': 'text/plain' });
-    res.end('Bot WhatsApp está rodando.\n');
+    res.status(404).json({ erro: 'Banco de dados não encontrado.' });
   }
-}).listen(PORT, () => {
+});
+
+// Inicia o servidor
+server.listen(PORT, () => {
   console.log(`🌐 Servidor HTTP iniciado na porta ${PORT}`);
 });
