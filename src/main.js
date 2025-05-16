@@ -16,7 +16,11 @@ app.use(cors())
 const server = http.createServer(app);
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
-const whatsapp = new Client();
+const whatsapp = new Client({
+  puppeteer: {
+    args: ['--no-sandbox', '--disable-setuid-sandbox']  // Aqui está a configuração para o puppeteer
+  }
+});
 
 let currentQR = null;
 let isReady = false;
@@ -41,10 +45,16 @@ const saveDB = (db) => {
 };
 
 // Cria a resposta da IA com base no histórico
-const getGroqChatCompletion = async (userHistory) => {
+//       content: `${treinamento}\n\nO nome do usuário é: ${userName}. Sempre chame o usuário pelo nome nas respostas para personalizar o atendimento.`
+
+const getGroqChatCompletion = async (userHistory,userName) => {
   console.log('🧠 Enviando histórico para a IA...');
   const messages = [
-    { role: "system", content: treinamento },
+    {
+      role: "system",
+      content: `${treinamento}\n\nO nome do usuário é: ${userName}. Sempre chame o usuário pelo nome nas respostas para personalizar o atendimento.`
+
+    },
     ...userHistory.map(msg => ({
       role: msg.from === 'user' ? 'user' : 'assistant',
       content: msg.message
@@ -89,6 +99,7 @@ whatsapp.on('message_create', async msg => {
   console.log(`📩 Mensagem recebida de ${userId}:`, msg.body);
 
   const db = loadDB();
+  const userName = msg._data?.notifyName || 'cliente';
 
   if (!db[userId]) {
     console.log(`👤 Novo usuário detectado: ${userId}`);
@@ -107,7 +118,7 @@ whatsapp.on('message_create', async msg => {
   db[userId].push({ from: 'user', message: msg.body });
 
   console.log('🧠 Gerando resposta da IA...');
-  const aiResponse = await getGroqChatCompletion(db[userId]);
+  const aiResponse = await getGroqChatCompletion(db[userId], userName);
 
   console.log(`📤 Enviando resposta para ${userId}:`, aiResponse);
   await whatsapp.sendMessage(userId, aiResponse);
