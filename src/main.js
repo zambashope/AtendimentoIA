@@ -162,7 +162,7 @@ whatsapp.on('message_create', async msg => {
 
     db[userId].messages.push({ from: 'bot', message: remarketingMessage });
     saveDB(db);
-  }, 30 * 1000);  // 30 segundos para teste
+  }, 4 * 60 * 60 * 1000);  // 30 segundos para teste
 
 });
 
